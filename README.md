@@ -45,6 +45,24 @@ Clone this repo and add it to your load path:
   :hook ((csharp-mode csharp-ts-mode) . eglot-csharp-mode))
 ```
 
+### Doom Emacs
+
+Add to `packages.el`:
+
+```elisp
+(package! eglot-csharp
+  :recipe (:host github :repo "razzmatazz/eglot-csharp"))
+```
+
+Add to `config.el`:
+
+```elisp
+(use-package! eglot-csharp
+  :hook ((csharp-mode csharp-ts-mode) . eglot-csharp-mode))
+```
+
+Then run `doom sync` and restart Emacs.
+
 ## Configuration
 
 Activate `eglot-csharp-mode` via a hook — this registers `csharp-ls`, enables
@@ -60,18 +78,6 @@ Or activate manually in any `.cs` buffer:
 
 ```
 M-x eglot-csharp-mode
-```
-
-### Doom Emacs
-
-```elisp
-;; in packages.el
-(package! eglot-csharp
-  :recipe (:host github :repo "razzmatazz/eglot-csharp"))
-
-;; in config.el
-(use-package! eglot-csharp
-  :hook ((csharp-mode csharp-ts-mode) . eglot-csharp-mode))
 ```
 
 ## Customization
