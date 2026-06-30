@@ -2,6 +2,9 @@
 
 C# language support for the [eglot](https://github.com/joaotavora/eglot) LSP client.
 
+> **Note:** This project was largely written with the assistance of an LLM (Claude).
+> Source files carry an `Assisted-by:` header line per the [Linux kernel coding-assistants convention](https://docs.kernel.org/process/coding-assistants.html#attribution).
+
 Currently built around [csharp-language-server](https://github.com/razzmatazz/csharp-language-server)
 (`csharp-ls`), with the intention of supporting additional C# LSP servers
 (such as [OmniSharp](https://github.com/OmniSharp/omnisharp-roslyn) and
