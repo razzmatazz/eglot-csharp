@@ -63,6 +63,21 @@ Add to `config.el`:
 
 Then run `doom sync` and restart Emacs.
 
+#### Local checkout (Doom Emacs)
+
+If you have cloned the repo locally and want Doom to load it directly from
+disk without fetching from GitHub, use `:local-repo` with the absolute path
+in `packages.el`:
+
+```elisp
+(package! eglot-csharp
+  :recipe (:local-repo "/path/to/eglot-csharp"))
+```
+
+straight.el will symlink that directory into its repos folder instead of
+cloning it, so edits to your local checkout are reflected immediately after
+`doom sync`.
+
 ## Configuration
 
 Activate `eglot-csharp-mode` via a hook — this registers `csharp-ls`, enables
