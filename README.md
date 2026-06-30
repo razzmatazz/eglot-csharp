@@ -19,20 +19,6 @@ The `csharp:/` URI handler is modeled after
 [eglot-java](https://github.com/yveszoundi/eglot-java)'s `jdt://` handler: decompiled
 source is written to a per-project cache directory so Emacs opens it as a normal file.
 
-## Requirements
-
-| Dependency | Minimum version |
-|---|---|
-| Emacs | 28.1 |
-| eglot | 1.16 |
-| [csharp-ls](https://github.com/razzmatazz/csharp-language-server) | 0.21.0 |
-
-Install `csharp-ls` via the .NET tool:
-
-```sh
-dotnet tool install --global csharp-ls
-```
-
 ## Installation
 
 ### Manual
