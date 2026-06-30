@@ -1,8 +1,11 @@
 # eglot-csharp
 
-C# language support for the [eglot](https://github.com/joaotavora/eglot) LSP client,
-built around [csharp-language-server](https://github.com/razzmatazz/csharp-language-server)
-(`csharp-ls`).
+C# language support for the [eglot](https://github.com/joaotavora/eglot) LSP client.
+
+Currently built around [csharp-language-server](https://github.com/razzmatazz/csharp-language-server)
+(`csharp-ls`), with the intention of supporting additional C# LSP servers
+(such as [OmniSharp](https://github.com/OmniSharp/omnisharp-roslyn) and
+[roslyn-lsp](https://github.com/dotnet/vscode-csharp)) in the future.
 
 ## Features
 
