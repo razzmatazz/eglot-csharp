@@ -96,12 +96,106 @@ recursively while parsing the `csharp:/` URI itself.
 
 ## Mechanism 2: workspace configuration
 
-`eglot-csharp-mode` sets `eglot-workspace-configuration` to
-`eglot-csharp--workspace-configuration`, which reports
-`csharp.useMetadataUris` to the server according to
-`eglot-csharp-use-metadata-uris`. This is one of three independent ways to
-enable the feature server-side (see `csharp-language-server`'s
-`docs/features.md`); eglot-csharp always uses workspace configuration.
+`eglot-csharp--workspace-configuration` reports `csharp.useMetadataUris`
+and `csharp.razorSupport` to the server according to
+`eglot-csharp-use-metadata-uris`/`eglot-csharp-razor-support`. This is one
+of three independent ways to enable `useMetadataUris` server-side (see
+`csharp-language-server`'s `docs/features.md`); eglot-csharp always uses
+workspace configuration.
+
+### Why this is installed as the *global default* of `eglot-workspace-configuration`, not `setq-local`
+
+An earlier version of this package did `(setq-local eglot-workspace-configuration
+#'eglot-csharp--workspace-configuration)` from `eglot-csharp--activate` — i.e.
+per-buffer, in whichever `.cs`/`.cshtml` buffer turned the minor mode on.
+This looked reasonable but had **no effect whatsoever**, discovered via
+real-world testing against `~/src/test-csharp-web` (see
+[plans/cshtml-razor-support.md](plans/cshtml-razor-support.md), "Manual
+Verification Findings"): csharp-ls's own startup log always showed
+`useMetadataUris = Some false` and `razorSupport = Some false`, no matter
+how the defcustoms were set.
+
+The reason is `eglot--workspace-configuration-plist` (in eglot.el), the
+function that actually computes what gets sent back for a
+`workspace/configuration` request:
+
+```elisp
+(defun eglot--workspace-configuration-plist (server &optional path)
+  (let ((val (with-temp-buffer
+               (setq default-directory (project-root (eglot--project server)))
+               (setq major-mode (car (eglot--major-modes server)))
+               (hack-dir-local-variables-non-file-buffer)
+               (if (functionp eglot-workspace-configuration)
+                   (funcall eglot-workspace-configuration server)
+                 eglot-workspace-configuration))))
+    ...))
+```
+
+This always runs inside a **throwaway temporary buffer**, never in any of
+the buffers actually visiting project files. `eglot-workspace-configuration`
+is `defvar-local`, so a `setq-local` made in a real editing buffer is a
+buffer-local binding that this fresh temp buffer never sees — only the
+variable's *global default* value (or a directory-local one applied by
+`hack-dir-local-variables-non-file-buffer` for that specific project
+directory + major mode) is ever consulted. `.el` code that wants to
+supply configuration for *every* project a server might attach to,
+unconditionally, therefore has to reach the **default** value, not a
+buffer-local one.
+
+`eglot-csharp` now installs its function as that default, once, at load
+time, composing with whatever function (if any) was already installed
+there so it doesn't clobber another package's global configuration:
+
+```elisp
+(let ((previous (default-value 'eglot-workspace-configuration)))
+  (setq-default eglot-workspace-configuration
+                (if (functionp previous)
+                    (lambda (server)
+                      (append (eglot-csharp--workspace-configuration server)
+                              (funcall previous server)))
+                  #'eglot-csharp--workspace-configuration)))
+```
+
+`eglot-csharp--workspace-configuration` itself only returns a `:csharp`
+section when `server` is `cl-typep`'d as an `eglot-csharp--server` (see
+Mechanism 1's sibling, `eglot-csharp--find-server`), returning `nil`
+otherwise — so it's harmless for it to be installed globally, even for
+projects whose server has nothing to do with C#.
+
+### Why not `advice-add` on `eglot--workspace-configuration-plist` instead
+
+This was considered — it would sidestep any risk of a *later*-loaded
+package clobbering our `setq-default` with its own, non-composing one —
+but it's the wrong tradeoff here:
+
+- `eglot-workspace-configuration`'s doc string explicitly documents that it
+  "should be set as a directory-local variable" for per-project overrides,
+  and `eglot--workspace-configuration-plist` implements exactly that via
+  `hack-dir-local-variables-non-file-buffer` in its temp buffer — a
+  project's own `.dir-locals.el` correctly shadows our global default,
+  because it becomes a *local* binding in that temp buffer, which ordinary
+  Elisp variable lookup already prefers over the default value. Advising
+  `eglot--workspace-configuration-plist` to splice a `:csharp` section into
+  its *result* would run after that resolution has already happened, and
+  would need extra logic to detect and preserve a project's legitimate
+  dir-local override instead of duplicating/overriding it with our own
+  defcustom-derived values — reimplementing precedence eglot already gives
+  the variable-based approach for free.
+- `eglot-workspace-configuration` is public, documented API (part of this
+  package's `eglot "1.16"` compatibility contract); `eglot--workspace-
+  configuration-plist` is a private, double-dash internal. This codebase
+  already leans on a few internals where necessary (`eglot--find-server`,
+  `eglot--languages`, the `eglot-path-to-uri` advice in Mechanism 3 below),
+  but treats that as a fallback for cases the public API has no hook for
+  — not a first choice when a public variable already does the job.
+
+The one thing advice would genuinely buy — immunity to some *other* package
+later doing a non-composing `(setq-default eglot-workspace-configuration
+...)` — is a narrower and more unusual failure mode than the dir-locals
+regression above, and isn't really fixable in general anyway:
+`eglot-workspace-configuration` is a single global slot, not a hook that
+supports multiple independent contributors, so *something* has to own
+"whoever sets it last wins" regardless of mechanism.
 
 ## Mechanism 3: transitive navigation via the `.metadata-uri` sidecar
 

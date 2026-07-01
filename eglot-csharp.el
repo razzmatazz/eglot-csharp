@@ -33,8 +33,14 @@
 ;; Key features:
 ;;
 ;;   - Registers csharp-ls as the eglot server for csharp-mode / csharp-ts-mode
+;;   - Registers csharp-ls for `.cshtml' (Razor) files too, via a thin
+;;     `web-mode'-derived `eglot-csharp-cshtml-mode', sharing the same
+;;     connection as a project's .cs buffers rather than starting a second,
+;;     redundant csharp-ls process
 ;;   - Enables `useMetadataUris' so that go-to-definition, go-to-implementation,
 ;;     and find-references all navigate into decompiled BCL/NuGet sources
+;;   - Enables `razorSupport' so that `.cshtml' documents get diagnostics,
+;;     hover, completion, and navigation from csharp-ls
 ;;   - Handles `csharp:/' URIs returned by csharp-ls by fetching the decompiled
 ;;     source via `csharp/metadata' and caching it to disk as a regular file
 ;;
@@ -65,6 +71,8 @@
 (require 'jsonrpc)
 (require 'project)
 (require 'subr-x)
+(require 'cl-lib)
+(require 'eieio)
 
 ;;; Customization
 
@@ -94,6 +102,36 @@ without special handling on subsequent visits."
   :type 'string
   :group 'eglot-csharp)
 
+(defcustom eglot-csharp-enable-cshtml t
+  "When non-nil, associate `.cshtml' files with `eglot-csharp-cshtml-mode'
+in `auto-mode-alist' and register it with `eglot-server-programs'.
+
+Set to nil if you don't want `.cshtml' files touched by this package at
+all (e.g. you use a different major mode or LSP setup for Razor views).
+
+Takes effect at load time; changing it afterwards via `customize' has no
+effect on an already-loaded `eglot-csharp'."
+  :type 'boolean
+  :group 'eglot-csharp)
+
+(defcustom eglot-csharp-razor-support t
+  "When non-nil, ask csharp-ls to enable Razor (`.cshtml') document support
+via the `csharp.razorSupport' workspace-configuration setting.  Requires
+csharp-ls with Razor support (see csharp-ls's docs/features.md)."
+  :type 'boolean
+  :group 'eglot-csharp)
+
+;;; Server class
+
+(defclass eglot-csharp--server (eglot-lsp-server) ()
+  "`eglot-lsp-server' subclass identifying csharp-ls connections started by
+`eglot-csharp-mode', regardless of which major mode(s) the connection
+currently manages.
+
+Lets `eglot-csharp--find-server' distinguish \"our\" server from any other,
+unrelated LSP server that might be registered for the same project (e.g. an
+HTML/CSS language server also managing `web-mode' buffers).")
+
 ;;; Internal helpers
 
 (defun eglot-csharp--metadata-uri-cache-file (uri)
@@ -115,10 +153,15 @@ URIs with `string-match' rather than path functions."
     (expand-file-name basename cache-dir)))
 
 (defun eglot-csharp--find-server ()
-  "Return the active eglot server for the current project, or nil."
-  (when-let* ((project (project-current))
+  "Return the active `eglot-csharp--server' for the current project, or nil.
+
+Filters by the `eglot-csharp--server' class (see above) so that, if some
+other unrelated LSP server also happens to be registered for the current
+project (e.g. a JSON or HTML language server), it isn't mistaken for the
+csharp-ls connection this package manages."
+  (when-let* ((project (eglot--current-project))
               (servers (gethash project eglot--servers-by-project)))
-    (car servers)))
+    (cl-find-if (lambda (s) (cl-typep s 'eglot-csharp--server)) servers)))
 
 (defun eglot-csharp--metadata-uri-sidecar-file (cache-file)
   "Return the sidecar file path recording CACHE-FILE's originating URI.
@@ -195,9 +238,40 @@ https://github.com/yveszoundi/eglot-java/blob/main/eglot-java.el"
 
 ;;; Workspace configuration
 
-(defun eglot-csharp--workspace-configuration (_server)
-  "Return the eglot workspace configuration plist for csharp-ls."
-  `(:csharp (:useMetadataUris ,(if eglot-csharp-use-metadata-uris t :false))))
+(defun eglot-csharp--workspace-configuration (server)
+  "Return the eglot workspace configuration plist for csharp-ls SERVER.
+
+Only returns the `:csharp' section when SERVER is one of this package's
+own connections (an `eglot-csharp--server'; see `eglot-csharp--find-server')
+so this is safe to install as the *global default* value of
+`eglot-workspace-configuration' (see the installation form below) without
+stepping on configuration some other, unrelated language server might need
+for its own project."
+  (when (cl-typep server 'eglot-csharp--server)
+    `(:csharp (:useMetadataUris ,(if eglot-csharp-use-metadata-uris t :false)
+               :razorSupport ,(if eglot-csharp-razor-support t :false)))))
+
+;; Install `eglot-csharp--workspace-configuration' as the *global default*
+;; value of `eglot-workspace-configuration', once, at load time — composing
+;; with whatever function (if any) was already installed there so this
+;; doesn't clobber configuration some other package already set up for its
+;; own servers.
+;;
+;; This must NOT be done with `setq-local' inside `eglot-csharp--activate'
+;; (what earlier versions of this package did and which silently had no
+;; effect — confirmed at runtime against a real csharp-ls; see DESIGN.md's
+;; "Mechanism 2: workspace configuration" for the full explanation of why
+;; `setq-local' doesn't work here, and why this is a global-default
+;; `setq-default' rather than `advice-add' on an eglot internal).
+(let ((eglot-csharp--previous-workspace-configuration
+       (default-value 'eglot-workspace-configuration)))
+  (setq-default eglot-workspace-configuration
+                (if (functionp eglot-csharp--previous-workspace-configuration)
+                    (lambda (server)
+                      (append (eglot-csharp--workspace-configuration server)
+                              (funcall eglot-csharp--previous-workspace-configuration
+                                       server)))
+                  #'eglot-csharp--workspace-configuration)))
 
 ;;; Transitive navigation inside decompiled/generated buffers
 
@@ -243,6 +317,29 @@ ordinary project source files."
             (eglot-csharp--metadata-uri-for-path buffer-file-name))
     (setq buffer-read-only t)))
 
+;;; `.cshtml' (Razor) support
+
+(declare-function web-mode "web-mode")
+
+(define-derived-mode eglot-csharp-cshtml-mode web-mode "Razor"
+  "Major mode for ASP.NET Core Razor (`.cshtml') files.
+
+A thin wrapper around `web-mode' (which already auto-detects the Razor
+\"engine\" from the `.cshtml' extension for fontification purposes) whose
+only job is to give `.cshtml' buffers a distinct major-mode symbol that
+`eglot-server-programs' can key on, without affecting other `web-mode'
+buffers (`.html', `.php', `.vue', ...) that have nothing to do with C#.
+
+`web-mode' itself is not a dependency of this package — it must be
+installed separately to use this mode.  See `eglot-csharp-enable-cshtml'
+to disable this mode's `auto-mode-alist' registration below.")
+
+;; Associate `.cshtml' files with `eglot-csharp-cshtml-mode' at load time,
+;; mirroring how the `csharp:/' file-name-handler above is registered
+;; unconditionally rather than tied to the minor mode.
+(when eglot-csharp-enable-cshtml
+  (add-to-list 'auto-mode-alist '("\\.cshtml\\'" . eglot-csharp-cshtml-mode)))
+
 ;;; Minor mode
 
 (defvar eglot-csharp-mode-map (make-sparse-keymap)
@@ -256,7 +353,12 @@ When enabled:
   - Registers csharp-ls as the eglot server for the current major mode
   - Configures `useMetadataUris' so that go-to-definition and friends
     navigate into decompiled BCL/NuGet sources via `csharp:/' URIs
-  - Starts (or reconnects) the eglot session"
+  - Configures `razorSupport' so that `.cshtml' buffers get diagnostics,
+    hover, completion, and navigation
+  - Starts (or reconnects) the eglot session — or, if a csharp-ls
+    connection is already managing this project under a different major
+    mode (e.g. `.cs' vs `.cshtml'), adopts this buffer into it instead of
+    starting a redundant second connection"
   :init-value nil
   :lighter nil
   :keymap eglot-csharp-mode-map
@@ -264,18 +366,78 @@ When enabled:
       (eglot-csharp--activate)
     (eglot-csharp--deactivate)))
 
+(defun eglot-csharp--language-id-for-mode (mode)
+  "Return the LSP `languageId' string to use for MODE.
+
+Used both when registering MODE with `eglot-server-programs' in
+`eglot-csharp--activate' and when adopting a buffer into an
+already-running server in `eglot-csharp--adopt-into'.  `eglot-server-programs'
+would otherwise default to a language ID derived from MODE's name (stripping
+a trailing `-mode'/`-ts-mode'), which is correct for `csharp-mode' and
+`csharp-ts-mode' (\"csharp\") but wrong for `eglot-csharp-cshtml-mode'; the
+latter needs \"razor\" to match csharp-ls's `razorCsharpDocumentFilter'."
+  (if (eq mode 'eglot-csharp-cshtml-mode) "razor" "csharp"))
+
+(defun eglot-csharp--adopt-into (server)
+  "Add the current buffer's major mode to SERVER's managed languages and
+activate `eglot--managed-mode' against it, without starting a new
+connection.
+
+Used when the current buffer's major mode isn't yet among an
+already-running project SERVER's managed languages — e.g. a project's
+first `.cshtml' buffer is opened after its `.cs' buffers already started a
+server, or vice versa.  Without this, eglot would start a second,
+redundant csharp-ls process for the same project (since a running
+server's managed languages are fixed at connect time and eglot has no
+built-in notion of \"this other connection would do just as well\"),
+which would desync in-memory edits between the two connections.  See
+plans/cshtml-razor-support.md for the full rationale."
+  (cl-pushnew (cons major-mode (eglot-csharp--language-id-for-mode major-mode))
+              (eglot--languages server)
+              :key #'car)
+  (eglot--maybe-activate-editing-mode))
+
+(defun eglot-csharp--contact (&rest _)
+  "Contact function for `eglot-server-programs' entries registered by
+`eglot-csharp-mode' (see `eglot-csharp--activate').
+
+Returns `eglot-csharp-server-program' wrapped with the `eglot-csharp--server'
+class — evaluated fresh on every connection attempt (per eglot's contract
+for function-valued CONTACTs, see `eglot--guess-contact') rather than a
+literal list snapshotted once at `add-to-list' time, so that customizing
+`eglot-csharp-server-program' at runtime is respected.
+
+Must return `(CLASS . PROGRAM-LIST)'-shaped data as a *function result*
+here, not as the literal `eglot-server-programs' entry itself: eglot only
+strips a leading class symbol from the value returned after funcalling a
+function-valued CONTACT (see the `class' binding in
+`eglot--guess-contact'), not from a literal list that merely *contains* a
+function among its elements."
+  (list 'eglot-csharp--server eglot-csharp-server-program))
+
 (defun eglot-csharp--activate ()
   "Set up csharp-ls and start eglot for the current buffer."
-  ;; Register the server program for the active major mode.
+  ;; Register the server program for the active major mode, tagged with
+  ;; `eglot-csharp--server' (see `eglot-csharp--find-server') and, for
+  ;; `eglot-csharp-cshtml-mode', an explicit `:language-id'.
   (add-to-list 'eglot-server-programs
-               (cons major-mode (list eglot-csharp-server-program)))
-  ;; Wire workspace configuration so useMetadataUris reaches the server.
-  (setq-local eglot-workspace-configuration
-              #'eglot-csharp--workspace-configuration)
+               (cons (if (eq major-mode 'eglot-csharp-cshtml-mode)
+                         (list major-mode
+                               :language-id (eglot-csharp--language-id-for-mode major-mode))
+                       major-mode)
+                     #'eglot-csharp--contact))
+  ;; Workspace configuration (useMetadataUris/razorSupport) is wired up
+  ;; globally at load time — see the `eglot-workspace-configuration'
+  ;; installation form above `eglot-csharp--workspace-configuration'.
   ;; Cached decompiled/generated source buffers aren't meant to be edited.
   (eglot-csharp--maybe-mark-metadata-buffer-read-only)
-  ;; Start or reconnect the eglot session.
-  (eglot-ensure))
+  ;; If csharp-ls is already managing this project (e.g. reached via a `.cs'
+  ;; buffer while this one is `.cshtml', or vice versa), share that
+  ;; connection instead of starting a redundant second one.  Otherwise
+  ;; start (or reconnect) normally.
+  (if-let* ((server (eglot-csharp--find-server)))
+      (eglot-csharp--adopt-into server)
+    (eglot-ensure)))
 
 (defun eglot-csharp--deactivate ()
   "Shut down the eglot session for the current buffer."
