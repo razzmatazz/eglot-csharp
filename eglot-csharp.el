@@ -64,6 +64,7 @@
 (require 'eglot)
 (require 'jsonrpc)
 (require 'project)
+(require 'subr-x)
 
 ;;; Customization
 
@@ -119,6 +120,33 @@ URIs with `string-match' rather than path functions."
               (servers (gethash project eglot--servers-by-project)))
     (car servers)))
 
+(defun eglot-csharp--metadata-uri-sidecar-file (cache-file)
+  "Return the sidecar file path recording CACHE-FILE's originating URI.
+
+csharp-ls tracks decompiled/generated documents purely by their `csharp:/'
+URI (see `csharp/metadata'); it has no notion of the on-disk cache file
+eglot-csharp writes them to.  We record the original URI here so that LSP
+requests concerning CACHE-FILE can later be addressed using that URI again
+(see `eglot-csharp--path-to-uri'), instead of a meaningless `file://' URI
+derived from CACHE-FILE.  This mirrors `lsp-csharp--cls-before-file-open'
+in lsp-mode's csharp-ls client, which uses the same `.metadata-uri' sidecar
+convention."
+  (concat cache-file ".metadata-uri"))
+
+(defun eglot-csharp--metadata-uri-for-path (path)
+  "Return the metadata URI PATH was cached from, or nil.
+
+Looks up the `.metadata-uri' sidecar written by
+`eglot-csharp--metadata-uri-handler' next to PATH (see
+`eglot-csharp--metadata-uri-sidecar-file').  Returns nil for ordinary
+project files, which have no such sidecar."
+  (let ((sidecar (eglot-csharp--metadata-uri-sidecar-file path)))
+    (when (file-readable-p sidecar)
+      (string-trim
+       (with-temp-buffer
+         (insert-file-contents sidecar)
+         (buffer-string))))))
+
 ;;; `csharp:/' URI handler
 
 (defun eglot-csharp--metadata-uri-handler (_operation &rest args)
@@ -131,7 +159,8 @@ opens it as a normal file.
 Modeled after eglot-java's `eglot-java--jdt-uri-handler':
 https://github.com/yveszoundi/eglot-java/blob/main/eglot-java.el"
   (let* ((uri        (car args))
-         (cache-file (eglot-csharp--metadata-uri-cache-file uri)))
+         (cache-file (eglot-csharp--metadata-uri-cache-file uri))
+         (sidecar    (eglot-csharp--metadata-uri-sidecar-file cache-file)))
     (unless (file-readable-p cache-file)
       (let* ((server   (or (eglot-csharp--find-server)
                            (user-error
@@ -145,6 +174,17 @@ https://github.com/yveszoundi/eglot-java/blob/main/eglot-java.el"
         (make-directory (file-name-directory cache-file) t)
         (with-temp-file cache-file
           (insert source))))
+    ;; Record the originating `csharp:/' URI next to the cached source, so
+    ;; that `eglot-csharp--metadata-uri-for-path' can later re-associate a
+    ;; buffer visiting this file with it.  Written unconditionally (not just
+    ;; on first fetch) so a cache file left over from an older version of
+    ;; this package without a sidecar self-heals on next access.
+    (unless (and (file-readable-p sidecar)
+                (equal uri (with-temp-buffer
+                            (insert-file-contents sidecar)
+                            (buffer-string))))
+      (with-temp-file sidecar
+        (insert uri)))
     cache-file))
 
 ;; Register the handler globally at load time.  The handler must be present
@@ -158,6 +198,50 @@ https://github.com/yveszoundi/eglot-java/blob/main/eglot-java.el"
 (defun eglot-csharp--workspace-configuration (_server)
   "Return the eglot workspace configuration plist for csharp-ls."
   `(:csharp (:useMetadataUris ,(if eglot-csharp-use-metadata-uris t :false))))
+
+;;; Transitive navigation inside decompiled/generated buffers
+
+(defun eglot-csharp--path-to-uri (orig-fun path &rest args)
+  "Around advice for `eglot-path-to-uri' preserving metadata URIs.
+
+If PATH is a cache file written out by `eglot-csharp--metadata-uri-handler'
+(i.e. decompiled BCL/NuGet source or a source-generated file fetched via
+`csharp/metadata'), return the `csharp:/' URI it was cached from instead of
+calling ORIG-FUN (which would derive a `file://' URI from PATH).
+
+`eglot--TextDocumentIdentifier' — the sole place eglot computes the URI
+sent to the server for a buffer — always routes through `eglot-path-to-uri'
+\(including every time it is recomputed, e.g. `eglot--signal-textDocument/
+didOpen' unconditionally resets the per-buffer cache before reopening\), so
+advising it here is sufficient to make every LSP request concerning such a
+buffer address it by its original metadata URI.
+
+This matters because csharp-ls tracks decompiled/generated documents
+solely by that `csharp:/' URI (see `workspaceFolder' and
+`workspaceFolderDocumentDetails' in csharp-language-server); a request
+addressed by the cache file's `file://' URI matches nothing server-side and
+silently returns no result — breaking navigation performed *from within*
+such a buffer (e.g. go-to-definition on a parameter type appearing in a
+decompiled method signature).
+
+Does nothing for ordinary project source files, since no sidecar file
+exists next to them; ORIG-FUN is called as usual in that case."
+  (or (eglot-csharp--metadata-uri-for-path path)
+      (apply orig-fun path args)))
+
+(advice-add 'eglot-path-to-uri :around #'eglot-csharp--path-to-uri)
+
+(defun eglot-csharp--maybe-mark-metadata-buffer-read-only ()
+  "Make the current buffer read-only if it is visiting cached metadata source.
+
+Decompiled/generated sources (see `eglot-csharp--metadata-uri-handler')
+have no meaningful save target, and editing them would desync the buffer
+from the URI the server thinks it is serving (see
+`eglot-csharp--path-to-uri'), so mark them read-only.  Does nothing for
+ordinary project source files."
+  (when (and buffer-file-name
+            (eglot-csharp--metadata-uri-for-path buffer-file-name))
+    (setq buffer-read-only t)))
 
 ;;; Minor mode
 
@@ -188,6 +272,8 @@ When enabled:
   ;; Wire workspace configuration so useMetadataUris reaches the server.
   (setq-local eglot-workspace-configuration
               #'eglot-csharp--workspace-configuration)
+  ;; Cached decompiled/generated source buffers aren't meant to be edited.
+  (eglot-csharp--maybe-mark-metadata-buffer-read-only)
   ;; Start or reconnect the eglot session.
   (eglot-ensure))
 
