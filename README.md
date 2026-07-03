@@ -10,6 +10,8 @@ Currently built around [csharp-language-server](https://github.com/razzmatazz/cs
 (such as [OmniSharp](https://github.com/OmniSharp/omnisharp-roslyn) and
 [roslyn-lsp](https://github.com/dotnet/vscode-csharp)) in the future.
 
+Requires Emacs 30.1+.
+
 ## Features
 
 - Registers `csharp-ls` as the eglot server for `csharp-mode` and `csharp-ts-mode`
@@ -131,8 +133,17 @@ manage `.cshtml`'s major mode / eglot activation yourself.
 | `eglot-csharp-metadata-cache-directory` | `".cache/eglot-csharp/metadata"` | Cache directory for decompiled files, relative to the project root |
 | `eglot-csharp-enable-cshtml` | `t` | Associate `.cshtml` files with `eglot-csharp-cshtml-mode`; takes effect at load time |
 | `eglot-csharp-razor-support` | `t` | Enable csharp-ls's Razor (`.cshtml`) document support via workspace configuration |
+| `eglot-csharp-analyzers-enabled` | `nil` | Run Roslyn analyzers as part of diagnostics (IDE style rules, NuGet analyzers); increases latency |
+| `eglot-csharp-apply-formatting-options` | `nil` | Let csharp-ls use client-supplied formatting options (may override `.editorconfig`) |
+| `eglot-csharp-locale` | `nil` | Force csharp-ls's diagnostics/message locale, e.g. `"en-US"` or `"de"`; `nil` follows the system locale |
+| `eglot-csharp-solution-path-override` | `nil` | Force a specific `.sln`/`.slnx` file when a workspace has more than one |
+| `eglot-csharp-log-level` | `nil` | csharp-ls's own log level (`"trace"`/`"debug"`/`"info"`/`"warning"`/`"error"`); `nil` leaves it at csharp-ls's default (`"info"`) |
+| `eglot-csharp-debug-mode` | `nil` | Enable csharp-ls's periodic request-queue statistics logging |
 
 All options are in the `eglot-csharp` customization group (`M-x customize-group RET eglot-csharp`).
+Every setting above that maps to a `csharp.*` workspace-configuration key can also be
+overridden **per project** via that project's `.dir-locals.el` — see
+[DESIGN.md](DESIGN.md)'s "Mechanism 2: workspace configuration" for why that works.
 
 ## How decompilation works
 

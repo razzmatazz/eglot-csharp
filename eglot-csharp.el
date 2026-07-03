@@ -8,7 +8,7 @@
 ;; Assisted-by: Claude:claude-sonnet-4-6
 ;; URL: https://github.com/razzmatazz/eglot-csharp
 ;; Keywords: convenience, languages, csharp, dotnet
-;; Package-Requires: ((emacs "28.1") (eglot "1.16") (jsonrpc "1.0.0"))
+;; Package-Requires: ((emacs "30.1") (eglot "1.16") (jsonrpc "1.0.0"))
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -103,11 +103,12 @@ without special handling on subsequent visits."
   :group 'eglot-csharp)
 
 (defcustom eglot-csharp-enable-cshtml t
-  "When non-nil, associate `.cshtml' files with `eglot-csharp-cshtml-mode'
-in `auto-mode-alist' and register it with `eglot-server-programs'.
+  "Associate `.cshtml' files with `eglot-csharp-cshtml-mode'.
 
-Set to nil if you don't want `.cshtml' files touched by this package at
-all (e.g. you use a different major mode or LSP setup for Razor views).
+When non-nil, `.cshtml' files are added to `auto-mode-alist' and
+registered with `eglot-server-programs' at load time.  Set to nil if you
+don't want `.cshtml' files touched by this package at all (e.g. you use a
+different major mode or LSP setup for Razor views).
 
 Takes effect at load time; changing it afterwards via `customize' has no
 effect on an already-loaded `eglot-csharp'."
@@ -115,22 +116,29 @@ effect on an already-loaded `eglot-csharp'."
   :group 'eglot-csharp)
 
 (defcustom eglot-csharp-razor-support t
-  "When non-nil, ask csharp-ls to enable Razor (`.cshtml') document support
+  "Enable csharp-ls's Razor (`.cshtml') document support.
+
+When non-nil, ask csharp-ls to enable Razor (`.cshtml') document support
 via the `csharp.razorSupport' workspace-configuration setting.  Requires
 csharp-ls with Razor support (see csharp-ls's docs/features.md)."
   :type 'boolean
   :group 'eglot-csharp)
 
 (defcustom eglot-csharp-analyzers-enabled nil
-  "When non-nil, ask csharp-ls to run Roslyn analyzers as part of diagnostics
-via the `csharp.analyzersEnabled' workspace-configuration setting (e.g. IDE
-style rules, third-party NuGet analyzers).  Increases diagnostic latency and
-CPU usage; csharp-ls itself defaults this setting to `false'."
+  "Enable csharp-ls's Roslyn analyzers as part of diagnostics.
+
+When non-nil, ask csharp-ls to run Roslyn analyzers (e.g. IDE style rules,
+third-party NuGet analyzers) as part of diagnostics via the
+`csharp.analyzersEnabled' workspace-configuration setting.  Increases
+diagnostic latency and CPU usage; csharp-ls itself defaults this setting
+to `false'."
   :type 'boolean
   :group 'eglot-csharp)
 
 (defcustom eglot-csharp-apply-formatting-options nil
-  "When non-nil, ask csharp-ls to use formatting options supplied by the
+  "Ask csharp-ls to use client-supplied formatting options.
+
+When non-nil, ask csharp-ls to use formatting options supplied by the
 client (which may override `.editorconfig' values) via the
 `csharp.applyFormattingOptions' workspace-configuration setting.  csharp-ls
 itself defaults this setting to `false'."
@@ -138,46 +146,51 @@ itself defaults this setting to `false'."
   :group 'eglot-csharp)
 
 (defcustom eglot-csharp-locale nil
-  "Locale to ask csharp-ls to use for diagnostics/messages, or nil to leave
-it unset (csharp-ls then follows `DOTNET_CLI_UI_LANGUAGE' or the system
-locale).  Set via the `csharp.locale' workspace-configuration setting, e.g.
-\"en-US\" or \"de\"."
+  "Locale to ask csharp-ls to use for diagnostics/messages.
+
+Nil leaves it unset (csharp-ls then follows `DOTNET_CLI_UI_LANGUAGE' or the
+system locale).  Set via the `csharp.locale' workspace-configuration
+setting, e.g. \"en-US\" or \"de\"."
   :type '(choice (const :tag "Unset (csharp-ls default)" nil) string)
   :group 'eglot-csharp)
 
 (defcustom eglot-csharp-solution-path-override nil
-  "Path to a specific `.sln'/`.slnx' file to ask csharp-ls to load, or nil to
-let csharp-ls pick automatically.  Useful when a workspace contains more
-than one solution file.  Set via the `csharp.solutionPathOverride'
+  "Path to a specific `.sln'/`.slnx' file to ask csharp-ls to load.
+
+Nil lets csharp-ls pick automatically.  Useful when a workspace contains
+more than one solution file.  Set via the `csharp.solutionPathOverride'
 workspace-configuration setting."
   :type '(choice (const :tag "Unset (csharp-ls default)" nil) file)
   :group 'eglot-csharp)
 
 (defcustom eglot-csharp-log-level nil
-  "Log level to ask csharp-ls to use for server output forwarded via
-`$/logTrace', or nil to leave it unset (csharp-ls then defaults to
-\"info\").  Set via the `csharp.logLevel' workspace-configuration setting;
-one of \"trace\", \"debug\", \"info\", \"warning\", \"error\"."
+  "Log level to ask csharp-ls to use for `$/logTrace' output.
+
+Nil leaves it unset (csharp-ls then defaults to \"info\").  Set via the
+`csharp.logLevel' workspace-configuration setting; one of \"trace\",
+\"debug\", \"info\", \"warning\", \"error\"."
   :type '(choice (const :tag "Unset (csharp-ls default: info)" nil)
                  (const "trace") (const "debug") (const "info")
                  (const "warning") (const "error"))
   :group 'eglot-csharp)
 
 (defcustom eglot-csharp-debug-mode nil
-  "When non-nil, ask csharp-ls to enable debug mode (periodic request-queue
-statistics logging) via the `csharp.debug.debugMode' workspace-configuration
-setting.  csharp-ls itself defaults this setting to `false'."
+  "Ask csharp-ls to log periodic request-queue statistics (debug mode).
+
+When non-nil, enables this via the `csharp.debug.debugMode'
+workspace-configuration setting.  csharp-ls itself defaults this setting
+to `false'."
   :type 'boolean
   :group 'eglot-csharp)
 
 ;;; Server class
 
 (defclass eglot-csharp--server (eglot-lsp-server) ()
-  "`eglot-lsp-server' subclass identifying csharp-ls connections started by
-`eglot-csharp-mode', regardless of which major mode(s) the connection
-currently manages.
+  "`eglot-lsp-server' subclass identifying this package's own connections.
 
-Lets `eglot-csharp--find-server' distinguish \"our\" server from any other,
+Tags csharp-ls connections started by `eglot-csharp-mode', regardless of
+which major mode(s) the connection currently manages.  Lets
+`eglot-csharp--find-server' distinguish \"our\" server from any other,
 unrelated LSP server that might be registered for the same project (e.g. an
 HTML/CSS language server also managing `web-mode' buffers).")
 
@@ -219,7 +232,7 @@ csharp-ls tracks decompiled/generated documents purely by their `csharp:/'
 URI (see `csharp/metadata'); it has no notion of the on-disk cache file
 eglot-csharp writes them to.  We record the original URI here so that LSP
 requests concerning CACHE-FILE can later be addressed using that URI again
-(see `eglot-csharp--path-to-uri'), instead of a meaningless `file://' URI
+\(see `eglot-csharp--path-to-uri'), instead of a meaningless `file://' URI
 derived from CACHE-FILE.  This mirrors `lsp-csharp--cls-before-file-open'
 in lsp-mode's csharp-ls client, which uses the same `.metadata-uri' sidecar
 convention."
@@ -246,7 +259,10 @@ project files, which have no such sidecar."
 
 Fetches decompiled source via the `csharp/metadata' LSP extension method,
 writes it to a per-project cache file, and returns that file path so Emacs
-opens it as a normal file.
+opens it as a normal file.  ARGS' car is the `csharp:/' URI itself; the
+rest, like _OPERATION, are ignored — this handler always does the same
+thing regardless of which `file-name-handler-alist' operation dispatched
+to it (see the installation form below for why).
 
 Modeled after eglot-java's `eglot-java--jdt-uri-handler':
 https://github.com/yveszoundi/eglot-java/blob/main/eglot-java.el"
@@ -256,13 +272,13 @@ https://github.com/yveszoundi/eglot-java/blob/main/eglot-java.el"
     (unless (file-readable-p cache-file)
       (let* ((server   (or (eglot-csharp--find-server)
                            (user-error
-                            "eglot-csharp: no active server for %s" uri)))
+                            "Eglot-csharp: no active server for %s" uri)))
              (response (jsonrpc-request server
                          :csharp/metadata
                          `(:textDocument (:uri ,uri))))
              (source   (or (plist-get response :source)
                            (user-error
-                            "eglot-csharp: csharp/metadata returned no source for %s" uri))))
+                            "Eglot-csharp: csharp/metadata returned no source for %s" uri))))
         (make-directory (file-name-directory cache-file) t)
         (with-temp-file cache-file
           (insert source))))
@@ -299,7 +315,7 @@ for its own project.
 
 `eglot-csharp-use-metadata-uris'/`eglot-csharp-razor-support'/
 `eglot-csharp-analyzers-enabled'/`eglot-csharp-apply-formatting-options' are
-always sent as an explicit `t' or `:false', since each has a well-defined
+always sent as an explicit t or `:false', since each has a well-defined
 on/off default of its own.  `eglot-csharp-locale'/
 `eglot-csharp-solution-path-override'/`eglot-csharp-log-level' are, instead,
 omitted from the plist entirely when nil (their \"unset\" state), letting
@@ -357,8 +373,9 @@ configuration' itself."
 (defun eglot-csharp--path-to-uri (orig-fun path &rest args)
   "Around advice for `eglot-path-to-uri' preserving metadata URIs.
 
+ORIG-FUN is the original `eglot-path-to-uri', called with PATH and ARGS.
 If PATH is a cache file written out by `eglot-csharp--metadata-uri-handler'
-(i.e. decompiled BCL/NuGet source or a source-generated file fetched via
+\(i.e. decompiled BCL/NuGet source or a source-generated file fetched via
 `csharp/metadata'), return the `csharp:/' URI it was cached from instead of
 calling ORIG-FUN (which would derive a `file://' URI from PATH).
 
@@ -458,15 +475,14 @@ latter needs \"razor\" to match csharp-ls's `razorCsharpDocumentFilter'."
   (if (eq mode 'eglot-csharp-cshtml-mode) "razor" "csharp"))
 
 (defun eglot-csharp--adopt-into (server)
-  "Add the current buffer's major mode to SERVER's managed languages and
-activate `eglot--managed-mode' against it, without starting a new
-connection.
+  "Add the current buffer's major mode to SERVER's managed languages.
 
-Used when the current buffer's major mode isn't yet among an
-already-running project SERVER's managed languages — e.g. a project's
-first `.cshtml' buffer is opened after its `.cs' buffers already started a
-server, or vice versa.  Without this, eglot would start a second,
-redundant csharp-ls process for the same project (since a running
+Also activates `eglot--managed-mode' against SERVER, without starting a
+new connection.  Used when the current buffer's major mode isn't yet
+among an already-running project SERVER's managed languages — e.g. a
+project's first `.cshtml' buffer is opened after its `.cs' buffers already
+started a server, or vice versa.  Without this, eglot would start a
+second, redundant csharp-ls process for the same project (since a running
 server's managed languages are fixed at connect time and eglot has no
 built-in notion of \"this other connection would do just as well\"),
 which would desync in-memory edits between the two connections.  See
@@ -477,10 +493,10 @@ plans/cshtml-razor-support.md for the full rationale."
   (eglot--maybe-activate-editing-mode))
 
 (defun eglot-csharp--contact (&rest _)
-  "Contact function for `eglot-server-programs' entries registered by
-`eglot-csharp-mode' (see `eglot-csharp--activate').
+  "Contact function for `eglot-server-programs' entries this package registers.
 
-Returns `eglot-csharp-server-program' wrapped with the `eglot-csharp--server'
+Used by `eglot-csharp--activate' (see `eglot-csharp-mode').  Returns
+`eglot-csharp-server-program' wrapped with the `eglot-csharp--server'
 class — evaluated fresh on every connection attempt (per eglot's contract
 for function-valued CONTACTs, see `eglot--guess-contact') rather than a
 literal list snapshotted once at `add-to-list' time, so that customizing

@@ -12,7 +12,7 @@
 (source "gnu")
 (source "melpa")
 
-(depends-on "emacs"   "28.1")
+(depends-on "emacs"   "30.1")
 (depends-on "eglot"   "1.16")
 (depends-on "jsonrpc" "1.0.0")
 
