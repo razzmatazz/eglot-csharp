@@ -1,7 +1,7 @@
 ;; -*- mode: eask; lexical-binding: t -*-
 
 (package "eglot-csharp"
-         "0.1.0"
+         "0.2.0"
          "C# extension for the eglot LSP client")
 
 (website-url "https://github.com/razzmatazz/eglot-csharp")
