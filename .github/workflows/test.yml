@@ -1,0 +1,25 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: make image
+
+      - name: Compile
+        run: make compile
+
+      - name: Lint
+        run: make lint
+
+      - name: Run ERT tests
+        run: make test

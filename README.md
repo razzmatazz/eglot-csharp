@@ -145,6 +145,38 @@ buffer — including for navigation performed *from within* such a buffer
 
 See [DESIGN.md](DESIGN.md) for how this is implemented under the hood.
 
+## Development
+
+Byte-compiling, linting, and running the test suite all happen inside a
+Docker (or Podman) container, via [Eask](https://emacs-eask.github.io/), so
+none of it depends on what's installed in your own Emacs. This mirrors the
+same mechanism used by [octocat.el](https://github.com/octocat.el/octocat.el).
+
+```sh
+make compile   # byte-compile with -Wall (eask compile --strict)
+make lint      # checkdoc + package-lint (eask lint checkdoc / eask lint package)
+make test      # run the ERT suite in test/eglot-csharp-tests.el
+make ci        # all three, in parallel (make -j3 ci also works)
+```
+
+Each target builds a local `eglot-csharp-test` image on first use (see
+`Dockerfile` — plain `emacs-nox` + [Eask](https://github.com/emacs-eask/cli)
+on `$PATH`), mounts the repo into it, and runs `eask install-deps --dev`
+before the actual command, so dependencies (including the dev-only
+`web-mode`, needed to exercise `eglot-csharp-cshtml-mode` in tests — see
+`Eask`) are resolved inside the container, not on the host.
+
+GitHub Actions (`.github/workflows/test.yml`) runs the same three `make`
+targets on every push/PR.
+
+The test suite in `test/eglot-csharp-tests.el` is currently a minimal
+starting scaffold covering pure, in-process logic only (the
+`eglot-server-programs`/contact-function resolution, `eglot-csharp--
+workspace-configuration`'s server-type gating, language-ID mapping) — it
+does not yet spin up a real `csharp-ls` connection. See the `TODO` comment
+above `eglot-csharp-test-workspace-configuration-ignores-other-servers` for
+the next obvious thing to add.
+
 ## License
 
 GPL-3.0-or-later. See [LICENSE](LICENSE).
