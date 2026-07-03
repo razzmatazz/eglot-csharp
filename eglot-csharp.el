@@ -121,6 +121,55 @@ csharp-ls with Razor support (see csharp-ls's docs/features.md)."
   :type 'boolean
   :group 'eglot-csharp)
 
+(defcustom eglot-csharp-analyzers-enabled nil
+  "When non-nil, ask csharp-ls to run Roslyn analyzers as part of diagnostics
+via the `csharp.analyzersEnabled' workspace-configuration setting (e.g. IDE
+style rules, third-party NuGet analyzers).  Increases diagnostic latency and
+CPU usage; csharp-ls itself defaults this setting to `false'."
+  :type 'boolean
+  :group 'eglot-csharp)
+
+(defcustom eglot-csharp-apply-formatting-options nil
+  "When non-nil, ask csharp-ls to use formatting options supplied by the
+client (which may override `.editorconfig' values) via the
+`csharp.applyFormattingOptions' workspace-configuration setting.  csharp-ls
+itself defaults this setting to `false'."
+  :type 'boolean
+  :group 'eglot-csharp)
+
+(defcustom eglot-csharp-locale nil
+  "Locale to ask csharp-ls to use for diagnostics/messages, or nil to leave
+it unset (csharp-ls then follows `DOTNET_CLI_UI_LANGUAGE' or the system
+locale).  Set via the `csharp.locale' workspace-configuration setting, e.g.
+\"en-US\" or \"de\"."
+  :type '(choice (const :tag "Unset (csharp-ls default)" nil) string)
+  :group 'eglot-csharp)
+
+(defcustom eglot-csharp-solution-path-override nil
+  "Path to a specific `.sln'/`.slnx' file to ask csharp-ls to load, or nil to
+let csharp-ls pick automatically.  Useful when a workspace contains more
+than one solution file.  Set via the `csharp.solutionPathOverride'
+workspace-configuration setting."
+  :type '(choice (const :tag "Unset (csharp-ls default)" nil) file)
+  :group 'eglot-csharp)
+
+(defcustom eglot-csharp-log-level nil
+  "Log level to ask csharp-ls to use for server output forwarded via
+`$/logTrace', or nil to leave it unset (csharp-ls then defaults to
+\"info\").  Set via the `csharp.logLevel' workspace-configuration setting;
+one of \"trace\", \"debug\", \"info\", \"warning\", \"error\"."
+  :type '(choice (const :tag "Unset (csharp-ls default: info)" nil)
+                 (const "trace") (const "debug") (const "info")
+                 (const "warning") (const "error"))
+  :group 'eglot-csharp)
+
+(defcustom eglot-csharp-debug-mode nil
+  "When non-nil, ask csharp-ls to enable debug mode (periodic request-queue
+statistics logging) via the `csharp.debug.debugMode' workspace-configuration
+setting.  csharp-ls itself defaults this setting to `false'."
+  :type 'boolean
+  :group 'eglot-csharp)
+
 ;;; Server class
 
 (defclass eglot-csharp--server (eglot-lsp-server) ()
@@ -246,10 +295,40 @@ own connections (an `eglot-csharp--server'; see `eglot-csharp--find-server')
 so this is safe to install as the *global default* value of
 `eglot-workspace-configuration' (see the installation form below) without
 stepping on configuration some other, unrelated language server might need
-for its own project."
+for its own project.
+
+`eglot-csharp-use-metadata-uris'/`eglot-csharp-razor-support'/
+`eglot-csharp-analyzers-enabled'/`eglot-csharp-apply-formatting-options' are
+always sent as an explicit `t' or `:false', since each has a well-defined
+on/off default of its own.  `eglot-csharp-locale'/
+`eglot-csharp-solution-path-override'/`eglot-csharp-log-level' are, instead,
+omitted from the plist entirely when nil (their \"unset\" state), letting
+csharp-ls fall back to its own default (system locale, auto-detected
+solution, \"info\" respectively) rather than sending an explicit `:false'
+or `null' for a string-valued setting.
+
+Because this function runs inside the very temp buffer
+`eglot--workspace-configuration-plist' hacks directory-local variables
+into (see DESIGN.md, \"Mechanism 2\"), every one of these defcustoms can
+also be overridden per-project via that project's `.dir-locals.el' —
+they're ordinary special variables, so `hack-dir-local-variables-non-file-
+buffer' can shadow them there same as it would `eglot-workspace-
+configuration' itself."
   (when (cl-typep server 'eglot-csharp--server)
     `(:csharp (:useMetadataUris ,(if eglot-csharp-use-metadata-uris t :false)
-               :razorSupport ,(if eglot-csharp-razor-support t :false)))))
+               :razorSupport ,(if eglot-csharp-razor-support t :false)
+               :analyzersEnabled ,(if eglot-csharp-analyzers-enabled t :false)
+               :applyFormattingOptions ,(if eglot-csharp-apply-formatting-options
+                                             t
+                                           :false)
+               ,@(when eglot-csharp-locale
+                   (list :locale eglot-csharp-locale))
+               ,@(when eglot-csharp-solution-path-override
+                   (list :solutionPathOverride eglot-csharp-solution-path-override))
+               ,@(when eglot-csharp-log-level
+                   (list :logLevel eglot-csharp-log-level))
+               ,@(when eglot-csharp-debug-mode
+                   (list :debug (list :debugMode t)))))))
 
 ;; Install `eglot-csharp--workspace-configuration' as the *global default*
 ;; value of `eglot-workspace-configuration', once, at load time — composing
