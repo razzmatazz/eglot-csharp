@@ -15,6 +15,7 @@ This project has been developed with substantial help from LLMs, including the f
 
 - `anthropic/claude-sonnet-4-6`
 - `anthropic/claude-sonnet-5`
+- `anthropic/claude-opus-5-5`
 
 Source files carry an `Assisted-by:` header line per the
 [Linux kernel coding-assistants convention](https://docs.kernel.org/process/coding-assistants.html#attribution).

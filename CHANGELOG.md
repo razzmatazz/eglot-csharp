@@ -3,6 +3,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.2.1] - 2026-10-20
+* Fix the `:csharp` workspace configuration never reaching csharp-ls when
+  any boolean setting (`eglot-csharp-use-metadata-uris`,
+  `eglot-csharp-razor-support`, `eglot-csharp-analyzers-enabled`,
+  `eglot-csharp-apply-formatting-options`) was off — which, with the
+  defaults, was most setups. Disabled settings were sent as `:false`, which
+  jsonrpc's encoder rejects; they're now sent as `:json-false`. Reported by
+  Craig Brozefsky.
+
 ## [0.2.0] - 2026-07-03
 * **Breaking:** raise minimum Emacs version from 28.1 to **30.1**, to lint
   cleanly against the eglot internals this package relies on.
