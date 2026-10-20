@@ -187,13 +187,13 @@ before the actual command, so dependencies (including the dev-only
 GitHub Actions (`.github/workflows/test.yml`) runs the same three `make`
 targets on every push/PR.
 
-The test suite in `test/eglot-csharp-tests.el` is currently a minimal
-starting scaffold covering pure, in-process logic only (the
-`eglot-server-programs`/contact-function resolution, `eglot-csharp--
-workspace-configuration`'s server-type gating, language-ID mapping) — it
-does not yet spin up a real `csharp-ls` connection. See the `TODO` comment
-above `eglot-csharp-test-workspace-configuration-ignores-other-servers` for
-the next obvious thing to add.
+The test suite in `test/eglot-csharp-tests.el` covers pure, in-process
+logic (the `eglot-server-programs`/contact-function resolution,
+`eglot-csharp--workspace-configuration`'s plist and its JSON encoding,
+language-ID mapping). It doesn't start a real `csharp-ls`; tests that need
+an `eglot-csharp--server` instance get one backed by a throwaway pipe process.
+
+See also [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

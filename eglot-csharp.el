@@ -316,12 +316,12 @@ for its own project.
 
 `eglot-csharp-use-metadata-uris'/`eglot-csharp-razor-support'/
 `eglot-csharp-analyzers-enabled'/`eglot-csharp-apply-formatting-options' are
-always sent as an explicit t or `:false', since each has a well-defined
+always sent as an explicit t or `:json-false', since each has a well-defined
 on/off default of its own.  `eglot-csharp-locale'/
 `eglot-csharp-solution-path-override'/`eglot-csharp-log-level' are, instead,
 omitted from the plist entirely when nil (their \"unset\" state), letting
 csharp-ls fall back to its own default (system locale, auto-detected
-solution, \"info\" respectively) rather than sending an explicit `:false'
+solution, \"info\" respectively) rather than sending an explicit `:json-false'
 or `null' for a string-valued setting.
 
 Because this function runs inside the very temp buffer
@@ -332,12 +332,12 @@ they're ordinary special variables, so `hack-dir-local-variables-non-file-
 buffer' can shadow them there same as it would `eglot-workspace-
 configuration' itself."
   (when (cl-typep server 'eglot-csharp--server)
-    `(:csharp (:useMetadataUris ,(if eglot-csharp-use-metadata-uris t :false)
-               :razorSupport ,(if eglot-csharp-razor-support t :false)
-               :analyzersEnabled ,(if eglot-csharp-analyzers-enabled t :false)
+    `(:csharp (:useMetadataUris ,(if eglot-csharp-use-metadata-uris t :json-false)
+               :razorSupport ,(if eglot-csharp-razor-support t :json-false)
+               :analyzersEnabled ,(if eglot-csharp-analyzers-enabled t :json-false)
                :applyFormattingOptions ,(if eglot-csharp-apply-formatting-options
                                              t
-                                           :false)
+                                           :json-false)
                ,@(when eglot-csharp-locale
                    (list :locale eglot-csharp-locale))
                ,@(when eglot-csharp-solution-path-override
