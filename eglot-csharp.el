@@ -4,10 +4,10 @@
 
 ;; Version: 0.2.1
 ;; Author: Saulius Menkevičius <sauliusmenkevicius@fastmail.com>
-;; Maintainer: Saulius Menkevičius <sauliusmenkevicius@fastmail.com>
 ;; Assisted-by: Claude:claude-sonnet-4-6
 ;; Assisted-by: Claude:claude-sonnet-5
 ;; Assisted-by: Claude:claude-opus-5-5
+;; Maintainer: Saulius Menkevičius <sauliusmenkevicius@fastmail.com>
 ;; URL: https://github.com/razzmatazz/eglot-csharp
 ;; Keywords: convenience, languages, csharp, dotnet
 ;; Package-Requires: ((emacs "30.1") (eglot "1.16") (jsonrpc "1.0.0"))
