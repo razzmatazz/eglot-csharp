@@ -152,7 +152,8 @@ goes through, `eglot-csharp` instead:
    this package without a sidecar self-heals on next access).
 
 2. Installs `eglot-csharp--path-to-uri` as `:around` advice on
-   `eglot-path-to-uri`, registered globally at load time:
+   `eglot-path-to-uri`, from `eglot-csharp--setup` when `eglot-csharp-mode`
+   is first enabled (it only matters once csharp-ls is running):
 
    ```elisp
    (defun eglot-csharp--path-to-uri (orig-fun path &rest args)

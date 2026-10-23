@@ -130,8 +130,8 @@ Opening a `.cshtml` file in a project whose `.cs` files are already managed by
 `eglot-csharp-mode` (or vice versa) shares the *same* `csharp-ls` connection rather than
 starting a second one — see [DESIGN.md](DESIGN.md) for why that matters and how it works.
 
-Set `eglot-csharp-enable-cshtml` to `nil` (before loading the package) if you'd rather
-manage `.cshtml`'s major mode / eglot activation yourself.
+Set `eglot-csharp-enable-cshtml` to `nil` (early in your init file, or with `setopt`) if
+you'd rather manage `.cshtml`'s major mode / eglot activation yourself.
 
 ## Customization
 
@@ -140,7 +140,7 @@ manage `.cshtml`'s major mode / eglot activation yourself.
 | `eglot-csharp-server-program` | `"csharp-ls"` | Path or name of the `csharp-ls` executable |
 | `eglot-csharp-use-metadata-uris` | `t` | Enable `csharp:/` URIs for decompiled sources |
 | `eglot-csharp-metadata-cache-directory` | `".cache/eglot-csharp/metadata"` | Cache directory for decompiled files, relative to the project root |
-| `eglot-csharp-enable-cshtml` | `t` | Associate `.cshtml` files with `eglot-csharp-cshtml-mode`; takes effect at load time |
+| `eglot-csharp-enable-cshtml` | `t` | Associate `.cshtml` files with `eglot-csharp-cshtml-mode` |
 | `eglot-csharp-razor-support` | `t` | Enable csharp-ls's Razor (`.cshtml`) document support |
 | `eglot-csharp-analyzers-enabled` | `nil` | Run Roslyn analyzers as part of diagnostics (IDE style rules, NuGet analyzers); increases latency |
 | `eglot-csharp-apply-formatting-options` | `nil` | Let csharp-ls use client-supplied formatting options (may override `.editorconfig`) |

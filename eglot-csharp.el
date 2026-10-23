@@ -107,17 +107,26 @@ without special handling on subsequent visits."
   :type 'string
   :group 'eglot-csharp)
 
+(defun eglot-csharp--set-enable-cshtml (symbol value)
+  "Set SYMBOL to VALUE, adding or removing the `.cshtml' association."
+  (set-default symbol value)
+  (if value
+      (add-to-list 'auto-mode-alist '("\\.cshtml\\'" . eglot-csharp-cshtml-mode))
+    (setq auto-mode-alist
+          (delete '("\\.cshtml\\'" . eglot-csharp-cshtml-mode) auto-mode-alist))))
+
 (defcustom eglot-csharp-enable-cshtml t
   "Associate `.cshtml' files with `eglot-csharp-cshtml-mode'.
 
-When non-nil, `.cshtml' files are added to `auto-mode-alist' and
-registered with `eglot-server-programs' at load time.  Set to nil if you
-don't want `.cshtml' files touched by this package at all (e.g. you use a
-different major mode or LSP setup for Razor views).
+Set to nil if you don't want `.cshtml' files touched by this package at
+all (e.g. you use a different major mode or LSP setup for Razor views).
 
-Takes effect at load time; changing it afterwards via `customize' has no
-effect on an already-loaded `eglot-csharp'."
+The association is autoloaded, so it is in place before the package
+loads.  Set this to nil before the package's autoloads run (e.g. early in
+your init file), or with `setopt' or Customize at any time."
   :type 'boolean
+  :set #'eglot-csharp--set-enable-cshtml
+  :initialize #'custom-initialize-reset
   :group 'eglot-csharp)
 
 (defcustom eglot-csharp-razor-support t
@@ -372,8 +381,6 @@ exists next to them; ORIG-FUN is called as usual in that case."
   (or (eglot-csharp--metadata-uri-for-path path)
       (apply orig-fun path args)))
 
-(advice-add 'eglot-path-to-uri :around #'eglot-csharp--path-to-uri)
-
 (defun eglot-csharp--maybe-mark-metadata-buffer-read-only ()
   "Make the current buffer read-only if it is visiting cached metadata source.
 
@@ -390,6 +397,7 @@ ordinary project source files."
 
 (declare-function web-mode "web-mode")
 
+;;;###autoload
 (define-derived-mode eglot-csharp-cshtml-mode web-mode "Razor"
   "Major mode for ASP.NET Core Razor (`.cshtml') files.
 
@@ -401,12 +409,14 @@ buffers (`.html', `.php', `.vue', ...) that have nothing to do with C#.
 
 `web-mode' itself is not a dependency of this package — it must be
 installed separately to use this mode.  See `eglot-csharp-enable-cshtml'
-to disable this mode's `auto-mode-alist' registration below.")
+to disable this mode's `auto-mode-alist' entry below.")
 
-;; Associate `.cshtml' files with `eglot-csharp-cshtml-mode' at load time,
-;; mirroring how the `csharp:/' file-name-handler above is registered
-;; unconditionally rather than tied to the minor mode.
-(when eglot-csharp-enable-cshtml
+;; Autoloaded, so `.cshtml' files open in `eglot-csharp-cshtml-mode' before
+;; the package loads.  `eglot-csharp-enable-cshtml' may be unbound here; a nil
+;; value set before this runs is respected, and its `:set' function handles
+;; later changes.
+;;;###autoload
+(unless (and (boundp 'eglot-csharp-enable-cshtml) (not eglot-csharp-enable-cshtml))
   (add-to-list 'auto-mode-alist '("\\.cshtml\\'" . eglot-csharp-cshtml-mode)))
 
 ;;; Minor mode
@@ -483,8 +493,16 @@ function-valued CONTACT (see the `class' binding in
 function among its elements."
   (list 'eglot-csharp--server eglot-csharp-server-program))
 
+(defun eglot-csharp--setup ()
+  "Install what every csharp-ls connection needs, once.
+
+Done when `eglot-csharp-mode' is first enabled rather than at load time;
+`advice-add' is a no-op when the advice is already there."
+  (advice-add 'eglot-path-to-uri :around #'eglot-csharp--path-to-uri))
+
 (defun eglot-csharp--activate ()
   "Set up csharp-ls and start eglot for the current buffer."
+  (eglot-csharp--setup)
   ;; Register the server program for the active major mode, tagged with
   ;; `eglot-csharp--server' (see `eglot-csharp--find-server') and, for
   ;; `eglot-csharp-cshtml-mode', an explicit `:language-id'.
