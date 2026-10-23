@@ -46,6 +46,9 @@
 ;;   - Handles `csharp:/' URIs returned by csharp-ls by fetching the decompiled
 ;;     source via `csharp/metadata' and caching it to disk as a regular file
 ;;
+;; csharp-ls receives its settings through `initializationOptions', which
+;; it reads from 0.29.0 on; older versions ignore them.
+;;
 ;; The `csharp:/' URI handler is modeled after eglot-java's `jdt://' handler:
 ;; https://github.com/yveszoundi/eglot-java/blob/main/eglot-java.el
 ;; Both write decompiled source to a per-project cache directory and return
@@ -121,8 +124,8 @@ effect on an already-loaded `eglot-csharp'."
   "Enable csharp-ls's Razor (`.cshtml') document support.
 
 When non-nil, ask csharp-ls to enable Razor (`.cshtml') document support
-via the `csharp.razorSupport' workspace-configuration setting.  Requires
-csharp-ls with Razor support (see csharp-ls's docs/features.md)."
+via the `csharp.razorSupport' setting.  Requires csharp-ls with Razor
+support (see csharp-ls's docs/features.md)."
   :type 'boolean
   :group 'eglot-csharp)
 
@@ -131,9 +134,8 @@ csharp-ls with Razor support (see csharp-ls's docs/features.md)."
 
 When non-nil, ask csharp-ls to run Roslyn analyzers (e.g. IDE style rules,
 third-party NuGet analyzers) as part of diagnostics via the
-`csharp.analyzersEnabled' workspace-configuration setting.  Increases
-diagnostic latency and CPU usage; csharp-ls itself defaults this setting
-to `false'."
+`csharp.analyzersEnabled' setting.  Increases diagnostic latency and CPU
+usage; csharp-ls itself defaults this setting to `false'."
   :type 'boolean
   :group 'eglot-csharp)
 
@@ -142,8 +144,8 @@ to `false'."
 
 When non-nil, ask csharp-ls to use formatting options supplied by the
 client (which may override `.editorconfig' values) via the
-`csharp.applyFormattingOptions' workspace-configuration setting.  csharp-ls
-itself defaults this setting to `false'."
+`csharp.applyFormattingOptions' setting.  csharp-ls itself defaults this
+setting to `false'."
   :type 'boolean
   :group 'eglot-csharp)
 
@@ -151,8 +153,8 @@ itself defaults this setting to `false'."
   "Locale to ask csharp-ls to use for diagnostics/messages.
 
 Nil leaves it unset (csharp-ls then follows `DOTNET_CLI_UI_LANGUAGE' or the
-system locale).  Set via the `csharp.locale' workspace-configuration
-setting, e.g. \"en-US\" or \"de\"."
+system locale).  Set via the `csharp.locale' setting, e.g. \"en-US\" or
+\"de\"."
   :type '(choice (const :tag "Unset (csharp-ls default)" nil) string)
   :group 'eglot-csharp)
 
@@ -161,7 +163,7 @@ setting, e.g. \"en-US\" or \"de\"."
 
 Nil lets csharp-ls pick automatically.  Useful when a workspace contains
 more than one solution file.  Set via the `csharp.solutionPathOverride'
-workspace-configuration setting."
+setting."
   :type '(choice (const :tag "Unset (csharp-ls default)" nil) file)
   :group 'eglot-csharp)
 
@@ -169,8 +171,8 @@ workspace-configuration setting."
   "Log level to ask csharp-ls to use for `$/logTrace' output.
 
 Nil leaves it unset (csharp-ls then defaults to \"info\").  Set via the
-`csharp.logLevel' workspace-configuration setting; one of \"trace\",
-\"debug\", \"info\", \"warning\", \"error\"."
+`csharp.logLevel' setting; one of \"trace\", \"debug\", \"info\",
+\"warning\", \"error\"."
   :type '(choice (const :tag "Unset (csharp-ls default: info)" nil)
                  (const "trace") (const "debug") (const "info")
                  (const "warning") (const "error"))
@@ -179,9 +181,8 @@ Nil leaves it unset (csharp-ls then defaults to \"info\").  Set via the
 (defcustom eglot-csharp-debug-mode nil
   "Ask csharp-ls to log periodic request-queue statistics (debug mode).
 
-When non-nil, enables this via the `csharp.debug.debugMode'
-workspace-configuration setting.  csharp-ls itself defaults this setting
-to `false'."
+When non-nil, enables this via the `csharp.debug.debugMode' setting.
+csharp-ls itself defaults this setting to `false'."
   :type 'boolean
   :group 'eglot-csharp)
 
@@ -303,17 +304,16 @@ https://github.com/yveszoundi/eglot-java/blob/main/eglot-java.el"
 (add-to-list 'file-name-handler-alist
              (cons "\\`csharp:/" #'eglot-csharp--metadata-uri-handler))
 
-;;; Workspace configuration
+;;; Server settings
 
-(defun eglot-csharp--workspace-configuration (server)
-  "Return the eglot workspace configuration plist for csharp-ls SERVER.
+(cl-defmethod eglot-initialization-options ((_server eglot-csharp--server))
+  "Return csharp-ls's settings, sent in the `initialize' request.
 
-Only returns the `:csharp' section when SERVER is one of this package's
-own connections (an `eglot-csharp--server'; see `eglot-csharp--find-server')
-so this is safe to install as the *global default* value of
-`eglot-workspace-configuration' (see the installation form below) without
-stepping on configuration some other, unrelated language server might need
-for its own project.
+csharp-ls reads them from `initializationOptions' in the same
+`(:csharp (...))' shape as its workspace configuration, from 0.29.0 on.
+Sending them here, rather than through `eglot-workspace-configuration',
+leaves that variable to the user: a `:csharp' section the user sets
+there is pulled by csharp-ls after `initialize' and wins, key by key.
 
 `eglot-csharp-use-metadata-uris'/`eglot-csharp-razor-support'/
 `eglot-csharp-analyzers-enabled'/`eglot-csharp-apply-formatting-options' are
@@ -322,53 +322,24 @@ on/off default of its own.  `eglot-csharp-locale'/
 `eglot-csharp-solution-path-override'/`eglot-csharp-log-level' are, instead,
 omitted from the plist entirely when nil (their \"unset\" state), letting
 csharp-ls fall back to its own default (system locale, auto-detected
-solution, \"info\" respectively) rather than sending an explicit `:json-false'
-or `null' for a string-valued setting.
+solution, \"info\" respectively).
 
-Because this function runs inside the very temp buffer
-`eglot--workspace-configuration-plist' hacks directory-local variables
-into (see DESIGN.md, \"Mechanism 2\"), every one of these defcustoms can
-also be overridden per-project via that project's `.dir-locals.el' —
-they're ordinary special variables, so `hack-dir-local-variables-non-file-
-buffer' can shadow them there same as it would `eglot-workspace-
-configuration' itself."
-  (when (cl-typep server 'eglot-csharp--server)
-    `(:csharp (:useMetadataUris ,(if eglot-csharp-use-metadata-uris t :json-false)
-               :razorSupport ,(if eglot-csharp-razor-support t :json-false)
-               :analyzersEnabled ,(if eglot-csharp-analyzers-enabled t :json-false)
-               :applyFormattingOptions ,(if eglot-csharp-apply-formatting-options
-                                             t
-                                           :json-false)
-               ,@(when eglot-csharp-locale
-                   (list :locale eglot-csharp-locale))
-               ,@(when eglot-csharp-solution-path-override
-                   (list :solutionPathOverride eglot-csharp-solution-path-override))
-               ,@(when eglot-csharp-log-level
-                   (list :logLevel eglot-csharp-log-level))
-               ,@(when eglot-csharp-debug-mode
-                   (list :debug (list :debugMode t)))))))
-
-;; Install `eglot-csharp--workspace-configuration' as the *global default*
-;; value of `eglot-workspace-configuration', once, at load time — composing
-;; with whatever function (if any) was already installed there so this
-;; doesn't clobber configuration some other package already set up for its
-;; own servers.
-;;
-;; This must NOT be done with `setq-local' inside `eglot-csharp--activate'
-;; (what earlier versions of this package did and which silently had no
-;; effect — confirmed at runtime against a real csharp-ls; see DESIGN.md's
-;; "Mechanism 2: workspace configuration" for the full explanation of why
-;; `setq-local' doesn't work here, and why this is a global-default
-;; `setq-default' rather than `advice-add' on an eglot internal).
-(let ((eglot-csharp--previous-workspace-configuration
-       (default-value 'eglot-workspace-configuration)))
-  (setq-default eglot-workspace-configuration
-                (if (functionp eglot-csharp--previous-workspace-configuration)
-                    (lambda (server)
-                      (append (eglot-csharp--workspace-configuration server)
-                              (funcall eglot-csharp--previous-workspace-configuration
-                                       server)))
-                  #'eglot-csharp--workspace-configuration)))
+eglot calls this in the buffer that starts the connection, so a project's
+`.dir-locals.el' can override any of these options for that project."
+  `(:csharp (:useMetadataUris ,(if eglot-csharp-use-metadata-uris t :json-false)
+             :razorSupport ,(if eglot-csharp-razor-support t :json-false)
+             :analyzersEnabled ,(if eglot-csharp-analyzers-enabled t :json-false)
+             :applyFormattingOptions ,(if eglot-csharp-apply-formatting-options
+                                           t
+                                         :json-false)
+             ,@(when eglot-csharp-locale
+                 (list :locale eglot-csharp-locale))
+             ,@(when eglot-csharp-solution-path-override
+                 (list :solutionPathOverride eglot-csharp-solution-path-override))
+             ,@(when eglot-csharp-log-level
+                 (list :logLevel eglot-csharp-log-level))
+             ,@(when eglot-csharp-debug-mode
+                 (list :debug (list :debugMode t))))))
 
 ;;; Transitive navigation inside decompiled/generated buffers
 
@@ -523,9 +494,8 @@ function among its elements."
                                :language-id (eglot-csharp--language-id-for-mode major-mode))
                        major-mode)
                      #'eglot-csharp--contact))
-  ;; Workspace configuration (useMetadataUris/razorSupport) is wired up
-  ;; globally at load time — see the `eglot-workspace-configuration'
-  ;; installation form above `eglot-csharp--workspace-configuration'.
+  ;; csharp-ls's settings go in `initializationOptions', see the
+  ;; `eglot-initialization-options' method above.
   ;; Cached decompiled/generated source buffers aren't meant to be edited.
   (eglot-csharp--maybe-mark-metadata-buffer-read-only)
   ;; If csharp-ls is already managing this project (e.g. reached via a `.cs'

@@ -12,7 +12,7 @@
 ;; These are deliberately limited to pure, in-process logic that needs no
 ;; running `csharp-ls' (or even a live eglot connection) — the
 ;; `eglot-server-programs' / `eglot--guess-contact' resolution logic and the
-;; workspace-configuration plist builder.  This suite is a starting
+;; initialization options builder.  This suite is a starting
 ;; scaffold, not full coverage; see the "TODO" comments below for the
 ;; obvious next things to add once there's a strategy for exercising a real
 ;; (or stubbed) `eglot-csharp--server' connection in CI.
@@ -53,7 +53,7 @@ shape is broken."
     (should (equal (eglot-csharp--contact)
                    '(eglot-csharp--server "/opt/bin/csharp-ls")))))
 
-;;; eglot-csharp--workspace-configuration
+;;; eglot-initialization-options
 
 (defmacro eglot-csharp-test--with-server (var &rest body)
   "Run BODY with VAR bound to a real `eglot-csharp--server' instance.
@@ -72,16 +72,14 @@ created alongside it are cleaned up afterwards."
          (unless (memq buf before)
            (kill-buffer buf))))))
 
-(ert-deftest eglot-csharp-test-workspace-configuration-ignores-other-servers ()
-  "Returns nil for any SERVER that isn't an `eglot-csharp--server'.
+(ert-deftest eglot-csharp-test-leaves-workspace-configuration-alone ()
+  "Loading eglot-csharp leaves `eglot-workspace-configuration' to the user.
 
-This is what makes it safe to install as the *global default* value of
-`eglot-workspace-configuration' (see DESIGN.md, \"Mechanism 2\") without
-affecting unrelated language servers' configuration."
-  (should (null (eglot-csharp--workspace-configuration nil)))
-  (should (null (eglot-csharp--workspace-configuration 'not-a-server))))
+Regression test: it used to install its own function as the global
+default, discarding a user's plist."
+  (should (null (default-value 'eglot-workspace-configuration))))
 
-(ert-deftest eglot-csharp-test-workspace-configuration-encodes-false ()
+(ert-deftest eglot-csharp-test-initialization-options-encode-false ()
   "Disabled boolean settings serialize as JSON false via jsonrpc.
 
 Regression test: these used to be sent as `:false', which
@@ -94,19 +92,19 @@ reached csharp-ls.  See CONTRIBUTING.md."
           (eglot-csharp-analyzers-enabled nil)
           (eglot-csharp-apply-formatting-options nil))
       (should (equal (jsonrpc--json-encode
-                      (eglot-csharp--workspace-configuration server))
+                      (eglot-initialization-options server))
                      (concat "{\"csharp\":{\"useMetadataUris\":false,"
                              "\"razorSupport\":false,"
                              "\"analyzersEnabled\":false,"
                              "\"applyFormattingOptions\":false}}"))))))
 
-(ert-deftest eglot-csharp-test-workspace-configuration-optional-settings ()
+(ert-deftest eglot-csharp-test-initialization-options-optional-settings ()
   "String settings are omitted when nil and included when set."
   (eglot-csharp-test--with-server server
     (let ((eglot-csharp-locale nil)
           (eglot-csharp-solution-path-override nil)
           (eglot-csharp-log-level nil))
-      (let ((section (plist-get (eglot-csharp--workspace-configuration server)
+      (let ((section (plist-get (eglot-initialization-options server)
                                 :csharp)))
         (should-not (plist-member section :locale))
         (should-not (plist-member section :solutionPathOverride))
@@ -114,7 +112,7 @@ reached csharp-ls.  See CONTRIBUTING.md."
     (let ((eglot-csharp-locale "en-US")
           (eglot-csharp-solution-path-override "/src/Foo.sln")
           (eglot-csharp-log-level "debug"))
-      (let ((section (plist-get (eglot-csharp--workspace-configuration server)
+      (let ((section (plist-get (eglot-initialization-options server)
                                 :csharp)))
         (should (equal (plist-get section :locale) "en-US"))
         (should (equal (plist-get section :solutionPathOverride) "/src/Foo.sln"))
