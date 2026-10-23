@@ -3,6 +3,9 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+* CI now tests against Emacs 30.2 and 31.1.
+
 ## [0.2.1] - 2026-10-20
 * Fix the `:csharp` workspace configuration never reaching csharp-ls when
   any boolean setting (`eglot-csharp-use-metadata-uris`,

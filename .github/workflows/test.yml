@@ -9,11 +9,39 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    strategy:
+      fail-fast: false
+      matrix:
+        emacs: ["30.2", "31.1"]
+
+    env:
+      EMACS: ${{ matrix.emacs }}
+
     steps:
       - uses: actions/checkout@v4
 
+      - uses: docker/setup-buildx-action@v3
+
+      # As `make image', but caching the layers, as Emacs is built from
+      # source and that takes minutes.
       - name: Build image
-        run: make image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          build-args: EMACS=${{ matrix.emacs }}
+          tags: eglot-csharp-test:emacs-${{ matrix.emacs }}
+          load: true
+          cache-from: type=gha,scope=emacs-${{ matrix.emacs }}
+          cache-to: type=gha,mode=max,scope=emacs-${{ matrix.emacs }}
+
+      - name: Cache Eask dependencies
+        uses: actions/cache@v4
+        with:
+          path: .eask
+          key: eask-${{ matrix.emacs }}-${{ hashFiles('Eask') }}
+
+      - name: Install dependencies
+        run: make deps
 
       - name: Compile
         run: make compile

@@ -1,34 +1,41 @@
-LOCAL_IMAGE := eglot-csharp-test
-SRC         := /src
+# The Emacs release to run, e.g. 30.2 or 31.1, see the Dockerfile.
+EMACS ?= 31.1
+IMAGE := eglot-csharp-test:emacs-$(EMACS)
 
 DOCKER := $(shell command -v docker 2>/dev/null || command -v podman 2>/dev/null)
 ifeq ($(DOCKER),)
   $(error Neither docker nor podman found on PATH)
 endif
 
-DOCKER_RUN = $(DOCKER) run --rm \
-               -v "$(CURDIR)":$(SRC) \
-               -w $(SRC) \
-               $(LOCAL_IMAGE)
+RUN = $(DOCKER) run --rm -v "$(CURDIR)":/src -w /src $(IMAGE)
 
-.PHONY: image compile lint test ci clean
+.PHONY: ci image deps clean compile lint test
+
+# Build the image and install the dependencies, then run compile, lint and
+# test in parallel, as they are independent.  compile, lint and test can
+# also run on their own once ci has run.
+ci: clean
+	$(MAKE) image
+	$(MAKE) deps
+	$(MAKE) -j3 compile lint test
 
 image:
-	$(DOCKER) build -t $(LOCAL_IMAGE) .
+	$(DOCKER) build --build-arg EMACS=$(EMACS) -t $(IMAGE) .
+
+deps:
+	$(RUN) eask install-deps --dev
 
 clean:
 	find . -maxdepth 1 -name '*.elc' -delete
 
-compile: image clean
-	$(DOCKER_RUN) sh -c "eask install-deps --dev && eask compile --strict"
+# Compile a copy, so the .elc files do not land next to the sources while
+# lint and test run alongside.
+compile:
+	$(RUN) sh -c "cp -a /src /tmp/build && cd /tmp/build && eask compile --strict"
 
-lint: image
-	$(DOCKER_RUN) sh -c "eask install-deps --dev && eask lint checkdoc && eask lint package"
+# checkdoc only prints its findings, so fail on any FILE:LINE: message.
+lint:
+	$(RUN) sh -c 'eask lint checkdoc 2>&1 | tee /tmp/checkdoc.log && ! grep -E "\.el:[0-9]+: " /tmp/checkdoc.log > /dev/null && eask lint package'
 
-test: image
-	$(DOCKER_RUN) sh -c "eask install-deps --dev && eask test ert test/eglot-csharp-tests.el"
-
-# compile, lint and test each spin up their own container and are independent
-# of each other once the image exists — run them in parallel with -j3.
-ci: image
-	$(MAKE) compile lint test
+test:
+	$(RUN) eask test ert test/eglot-csharp-tests.el

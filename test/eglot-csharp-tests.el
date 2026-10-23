@@ -1,5 +1,7 @@
 ;;; eglot-csharp-tests.el --- ERT tests for eglot-csharp.el  -*- lexical-binding: t; -*-
 
+;; Assisted-by: Claude:claude-opus-5-5
+
 ;;; Commentary:
 
 ;; Minimal starter test suite for eglot-csharp.el.  Run via:

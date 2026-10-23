@@ -172,21 +172,28 @@ none of it depends on what's installed in your own Emacs. This mirrors the
 same mechanism used by [octocat.el](https://github.com/octocat.el/octocat.el).
 
 ```sh
+make ci        # build the image, install deps, then compile, lint and test in parallel
 make compile   # byte-compile with -Wall (eask compile --strict)
 make lint      # checkdoc + package-lint (eask lint checkdoc / eask lint package)
 make test      # run the ERT suite in test/eglot-csharp-tests.el
-make ci        # all three, in parallel (make -j3 ci also works)
 ```
 
-Each target builds a local `eglot-csharp-test` image on first use (see
-`Dockerfile` — plain `emacs-nox` + [Eask](https://github.com/emacs-eask/cli)
-on `$PATH`), mounts the repo into it, and runs `eask install-deps --dev`
-before the actual command, so dependencies (including the dev-only
+`make ci` builds a local `eglot-csharp-test:emacs-$EMACS` image (see
+`Dockerfile` — Emacs built from the GNU release, plus
+[Eask](https://github.com/emacs-eask/cli) on `$PATH`) and runs
+`eask install-deps --dev` in it, so dependencies (including the dev-only
 `web-mode`, needed to exercise `eglot-csharp-cshtml-mode` in tests — see
-`Eask`) are resolved inside the container, not on the host.
+`Eask`) are resolved inside the container, not on the host. `compile`,
+`lint` and `test` can then run on their own.
 
-GitHub Actions (`.github/workflows/test.yml`) runs the same three `make`
-targets on every push/PR.
+`EMACS` selects the release, 31.1 by default:
+
+```sh
+make ci EMACS=30.2
+```
+
+GitHub Actions (`.github/workflows/test.yml`) runs the same targets on every
+push/PR against Emacs 30.2 and 31.1.
 
 The test suite in `test/eglot-csharp-tests.el` covers pure, in-process
 logic (the `eglot-server-programs`/contact-function resolution,
