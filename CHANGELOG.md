@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 * CI now tests against Emacs 30.2 and 31.1.
+* `LICENSE` now holds the GPL v3 text, matching the GPL-3.0-or-later
+  stated in the source headers and README; it held GPL v2 by mistake.
 
 ## [0.2.1] - 2026-10-20
 * Fix the `:csharp` workspace configuration never reaching csharp-ls when
