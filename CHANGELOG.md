@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
+* **Breaking:** require csharp-ls 0.29.0+; settings go in `initializationOptions`, leaving `eglot-workspace-configuration` to you.
 * Test on Emacs 30.2 and 31.1 in CI.
 * Fix `LICENSE` to hold the GPL v3 text the headers state.
 
